@@ -20,13 +20,70 @@ interface IRequest {
 @injectable()
 class CreateOrderService {
   constructor(
+    @inject('OrdersRepository')
     private ordersRepository: IOrdersRepository,
+    @inject('ProductsRepository')
     private productsRepository: IProductsRepository,
+    @inject('CustomersRepository')
     private customersRepository: ICustomersRepository,
   ) {}
 
   public async execute({ customer_id, products }: IRequest): Promise<Order> {
-    // TODO
+    const customer = await this.customersRepository.findById(customer_id);
+
+    if (!customer) {
+      throw new AppError('Cliente não encontrado.');
+    }
+
+    const productsOrder = await this.productsRepository.findAllById(products);
+
+    if (!productsOrder.length) {
+      throw new AppError('Produto não encontrado.');
+    }
+
+    const productsIds = productsOrder.map(product => product.id);
+
+    const checkInexistentProducts = products.filter(
+      product => !productsIds.includes(product.id),
+    );
+
+    if (checkInexistentProducts.length) {
+      throw new AppError('Produto(s) não encontrado(s)');
+    }
+
+    const findProductsWithNoQuantityAvailable = products.filter(
+      product =>
+        productsOrder.filter(p => p.id === product.id)[0].quantity <
+        product.quantity,
+    );
+
+    if (findProductsWithNoQuantityAvailable.length) {
+      throw new AppError('Quantidade indisponível.');
+    }
+
+    const serializedProducts = products.map(product => ({
+      product_id: product.id,
+      quantity: product.quantity,
+      price: productsOrder.filter(p => p.id === product.id)[0].price,
+    }));
+
+    const order = await this.ordersRepository.create({
+      customer,
+      products: serializedProducts,
+    });
+
+    const { order_products } = order;
+
+    const orderedProductsQuantity = order_products.map(product => ({
+      id: product.product_id,
+      quantity:
+        productsOrder.filter(p => p.id === product.product_id)[0].quantity -
+        product.quantity,
+    }));
+
+    await this.productsRepository.updateQuantity(orderedProductsQuantity);
+
+    return order;
   }
 }
 
