@@ -1,3 +1,5 @@
+/* eslint-disable no-param-reassign */
+/* eslint-disable no-return-assign */
 import { inject, injectable } from 'tsyringe';
 
 import AppError from '@shared/errors/AppError';
@@ -43,12 +45,17 @@ class CreateOrderService {
 
     const productsIds = productsOrder.map(product => product.id);
 
-    const checkInexistentProducts = products.filter(
-      product => !productsIds.includes(product.id),
+    const message = productsIds.reduce(
+      (accumulator, id) => `${(accumulator += id)} / `,
+      `Produto(s) não encontrado(s): `,
     );
 
+    const checkInexistentProducts = products.filter(({ id }) => {
+      return !productsIds.includes(id);
+    });
+
     if (checkInexistentProducts.length) {
-      throw new AppError('Produto(s) não encontrado(s)');
+      throw new AppError(message);
     }
 
     const findProductsWithNoQuantityAvailable = products.filter(
